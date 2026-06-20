@@ -63,7 +63,14 @@ def index():
 @app.route("/start", methods=["POST"])
 def start():
     data = request.json
-    usernames = [u.strip().lstrip("@") for u in data.get("users", []) if u.strip()]
+    def parse_username(u):
+        u = u.strip()
+        # URL 형식이면 계정명만 추출: https://www.tiktok.com/@username
+        if "tiktok.com" in u:
+            u = u.rstrip("/").split("@")[-1].split("?")[0]
+        return u.lstrip("@")
+
+    usernames = [parse_username(u) for u in data.get("users", []) if u.strip()]
     count = int(data.get("count", 100))
     output_dir = data.get("output_dir", "downloads")
 
