@@ -78,8 +78,6 @@
 </div>
 
 <script>
-  const cards = {};
-
   function startDownload() {
     const raw = document.getElementById("users").value.trim();
     const users = raw.split("\n").map(u => u.trim().replace(/^@/, "")).filter(Boolean);
@@ -91,7 +89,6 @@
     document.getElementById("startBtn").disabled = true;
     const resultsDiv = document.getElementById("results");
     resultsDiv.innerHTML = "";
-    cards = {};
 
     users.forEach(u => {
       const card = document.createElement("div");
@@ -154,8 +151,7 @@
     });
   }
 
-  // allow Enter key in textarea to add newline (default), override only outside
-  let cards = {};
+
 </script>
 </body>
 </html>
