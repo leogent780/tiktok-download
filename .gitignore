@@ -1,0 +1,5 @@
+downloads/
+*.log
+cookies.txt
+__pycache__/
+*.pyc
