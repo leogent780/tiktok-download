@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>TikTok 다운로더</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .container { background: white; border-radius: 16px; padding: 40px; width: 600px; box-shadow: 0 4px 24px rgba(0,0,0,0.1); }
+    h1 { font-size: 24px; margin-bottom: 8px; color: #111; }
+    p.sub { color: #666; margin-bottom: 28px; font-size: 14px; }
+    label { font-size: 13px; font-weight: 600; color: #444; display: block; margin-bottom: 6px; }
+    textarea {
+      width: 100%; height: 140px; border: 1.5px solid #ddd; border-radius: 10px;
+      padding: 12px; font-size: 14px; resize: vertical; outline: none; transition: border 0.2s;
+    }
+    textarea:focus { border-color: #fe2c55; }
+    .row { display: flex; gap: 12px; margin-top: 16px; align-items: flex-end; }
+    .field { flex: 1; }
+    input[type=number] {
+      width: 100%; border: 1.5px solid #ddd; border-radius: 10px;
+      padding: 10px 12px; font-size: 14px; outline: none; transition: border 0.2s;
+    }
+    input[type=number]:focus { border-color: #fe2c55; }
+    button {
+      background: #fe2c55; color: white; border: none; border-radius: 10px;
+      padding: 11px 28px; font-size: 15px; font-weight: 600; cursor: pointer;
+      transition: background 0.2s; white-space: nowrap;
+    }
+    button:hover { background: #d4203f; }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+    #results { margin-top: 28px; }
+    .user-card {
+      border: 1.5px solid #eee; border-radius: 12px; padding: 16px 18px;
+      margin-bottom: 12px; transition: border 0.2s;
+    }
+    .user-card.running { border-color: #fe2c55; }
+    .user-card.done { border-color: #22c55e; }
+    .user-card.error { border-color: #ef4444; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .username { font-weight: 700; font-size: 15px; }
+    .badge {
+      font-size: 12px; padding: 3px 10px; border-radius: 20px; font-weight: 600;
+    }
+    .badge.waiting { background: #f3f4f6; color: #999; }
+    .badge.running { background: #fff0f3; color: #fe2c55; }
+    .badge.done { background: #f0fdf4; color: #22c55e; }
+    .badge.error { background: #fef2f2; color: #ef4444; }
+    .progress-bar-wrap { background: #f3f4f6; border-radius: 99px; height: 8px; overflow: hidden; }
+    .progress-bar { height: 100%; background: #fe2c55; border-radius: 99px; transition: width 0.4s; }
+    .progress-text { font-size: 12px; color: #888; margin-top: 6px; }
+    .error-msg { font-size: 12px; color: #ef4444; margin-top: 6px; }
+    .summary { text-align: center; padding: 16px; background: #f0fdf4; border-radius: 10px; color: #16a34a; font-weight: 600; margin-top: 8px; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>🎵 TikTok 다운로더</h1>
+  <p class="sub">계정별 최근 영상을 자동으로 다운로드합니다</p>
+
+  <label>TikTok 계정 목록 (한 줄에 하나씩, @ 생략 가능)</label>
+  <textarea id="users" placeholder="charlidamelio&#10;addisonre&#10;khaby.lame"></textarea>
+
+  <div class="row">
+    <div class="field">
+      <label>계정당 다운로드 수</label>
+      <input type="number" id="count" value="100" min="1" max="500" />
+    </div>
+    <div class="field">
+      <label>저장 폴더명</label>
+      <input type="text" id="output_dir" value="downloads" style="border:1.5px solid #ddd;border-radius:10px;padding:10px 12px;font-size:14px;width:100%;outline:none;" />
+    </div>
+    <button id="startBtn" onclick="startDownload()">다운로드 시작</button>
+  </div>
+
+  <div id="results"></div>
+</div>
+
+<script>
+  const cards = {};
+
+  function startDownload() {
+    const raw = document.getElementById("users").value.trim();
+    const users = raw.split("\n").map(u => u.trim().replace(/^@/, "")).filter(Boolean);
+    const count = parseInt(document.getElementById("count").value) || 100;
+    const output_dir = document.getElementById("output_dir").value.trim() || "downloads";
+
+    if (!users.length) { alert("계정명을 입력해주세요"); return; }
+
+    document.getElementById("startBtn").disabled = true;
+    const resultsDiv = document.getElementById("results");
+    resultsDiv.innerHTML = "";
+    cards = {};
+
+    users.forEach(u => {
+      const card = document.createElement("div");
+      card.className = "user-card";
+      card.id = "card-" + u;
+      card.innerHTML = `
+        <div class="card-header">
+          <span class="username">@${u}</span>
+          <span class="badge waiting" id="badge-${u}">대기중</span>
+        </div>
+        <div class="progress-bar-wrap"><div class="progress-bar" id="bar-${u}" style="width:0%"></div></div>
+        <div class="progress-text" id="text-${u}">준비중...</div>
+      `;
+      resultsDiv.appendChild(card);
+    });
+
+    fetch("/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ users, count, output_dir })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) { alert(data.error); return; }
+      const es = new EventSource("/stream/" + data.session_id);
+      es.onmessage = e => {
+        const msg = JSON.parse(e.data);
+        if (msg.type === "ping") return;
+
+        const u = msg.user;
+        if (msg.type === "start") {
+          document.getElementById("card-" + u).className = "user-card running";
+          document.getElementById("badge-" + u).className = "badge running";
+          document.getElementById("badge-" + u).textContent = "다운로드중";
+          document.getElementById("text-" + u).textContent = "시작...";
+        } else if (msg.type === "progress") {
+          const pct = Math.round((msg.count / count) * 100);
+          document.getElementById("bar-" + u).style.width = pct + "%";
+          document.getElementById("text-" + u).textContent = `${msg.count} / ${count}개 완료`;
+        } else if (msg.type === "done") {
+          document.getElementById("card-" + u).className = "user-card done";
+          document.getElementById("badge-" + u).className = "badge done";
+          document.getElementById("badge-" + u).textContent = "완료";
+          document.getElementById("bar-" + u).style.width = "100%";
+          document.getElementById("text-" + u).textContent = `총 ${msg.count}개 다운로드 완료`;
+        } else if (msg.type === "error") {
+          document.getElementById("card-" + u).className = "user-card error";
+          document.getElementById("badge-" + u).className = "badge error";
+          document.getElementById("badge-" + u).textContent = "오류";
+          document.getElementById("text-" + u).innerHTML = `<span class="error-msg">${msg.message}</span>`;
+        } else if (msg.type === "all_done") {
+          es.close();
+          document.getElementById("startBtn").disabled = false;
+          const summary = document.createElement("div");
+          summary.className = "summary";
+          summary.textContent = "✅ 모든 다운로드 완료!";
+          resultsDiv.appendChild(summary);
+        }
+      };
+    });
+  }
+
+  // allow Enter key in textarea to add newline (default), override only outside
+  let cards = {};
+</script>
+</body>
+</html>
